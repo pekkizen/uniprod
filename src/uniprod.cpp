@@ -69,7 +69,6 @@ int main(int an, char **arg) {
         if (k >= 300) increment = 100;
         if (k >= 500) increment = 250;
         if (k >= 2000) increment = 500;
-        if (k >= 2000) rounds = 1e+6;
     }
     return 0;
 }
