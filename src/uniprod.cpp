@@ -9,6 +9,7 @@ static inline uint64_t rotl(const uint64_t x, int k) {
 
 // prng.di.unimi.it/xoroshiro128plus.c
 static uint64_t s[2] = {0x83b5b142866da9d5, 0xcb9c59b3f9f87d4d};
+
 static inline uint64_t xoroshiro128plus(void) {
     const uint64_t s0 = s[0];
     uint64_t s1 = s[1];
@@ -48,14 +49,16 @@ void samplemean(int rounds, int N, int call) {
 }
 
 // uniprod maxN, rounds, seed
-// uniprod 10000, 1e4, 123
+// uniprod 11000, 1e6, 123
 int main(int an, char **arg) {
 
-    if (an < 4) return 1;
-
-    long N = atol(arg[1]);
-    int rounds = atol(arg[2]);
-    long seed = atol(arg[3]);
+    if (an < 4) {
+        printf("All three parameters must be given\n");
+        return 1;
+    }
+    long N = (long)atol(arg[1]);
+    int rounds = (int)atof(arg[2]);
+    long seed = (long)atol(arg[3]);
     if (seed > 0) {
         s[0] *= seed;
         s[1] += seed;
