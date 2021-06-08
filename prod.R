@@ -1,19 +1,25 @@
 
+# Comment these out, if Rcpp/C++ compiler are not present.
 library(Rcpp)
 sourceCpp(file = "uniprod.cpp")
 
-# setup rng
+# setup rng --------------------------------
 # library(dqrng)
 # RNG <- dqrunif
 # dqRNGkind("Xoroshiro128+")
+# SETSEED <- dqset.seed
 # dqset.seed(1)
 
+# Standard R function. rgamma uses this always
 # RNG <- runif
+# SETSEED <- set.seed
 # set.seed(1)
 
-# prod.runif is needed to compare R and C++ results
+# This needs C++ functions.
 RNG <- prod.runif
-prod.set.seed(1)
+SETSEED <- prod.set.seed
+# prod.set.seed(1)
+# --------------------------------------------
 
 prod.zero <- function() {
     prod <- 1
@@ -26,25 +32,40 @@ prod.zero <- function() {
     n
 }
 
-# prod.mean samples prodcnt U(0, 1) products of length N and
+# prod.mean80(samplesize=1e6, N = 100, gamma = F, seed = 0)
+prod.mean80 <- function(samplesize = 1e6, N = 200, gamma = F, seed = 0) {
+    if (gamma && seed > 0) set.seed(seed)
+    invisible(prodmean80(samplesize, N, gamma, seed))
+}
+
+# prod.mean64(samplesize=1e6, N = 100, gamma = F, seed = 0)
+prod.mean64 <- function(samplesize = 1e6, N = 200, gamma = F, seed = 0) {
+    if (gamma && seed > 0) set.seed(seed)
+    invisible(prodmean64(samplesize, N, gamma, seed))
+}
+
+# prod.mean samples samplesize U(0, 1) products of length N and
 # calculates a summary.
 #
-# prod.mean(samplesize = 1e+6, N = 100)
-prod.mean <- function(samplesize = 1e+6, N = 100) {
+# prod.mean(samplesize=1e6, N=200, gamma=F, seed=0)
+prod.mean <- function(samplesize = 1e6, N = 200, gamma = F, seed = 0) {
     meanprod <- 0
     meanlog <- 0
     meangeom <- 0
-    c <- 0
+    if (gamma && seed > 0) set.seed(seed) # rgamma
+    if (!gamma && seed > 0) SETSEED(seed)
+
     for (i in 1:samplesize) {
-        prod <- prod(RNG(N))
-        log <- log(prod)
-
-        # log <- -rgamma(1, N) # same result faster
-        # prod <- exp(log)
-
-        meanprod <- meanprod + prod
-        meanlog <- meanlog + log
-        meangeom <- meangeom + prod^(1 / N)
+        if (gamma) {
+            logprod <- -rgamma(1, N)
+            produ <- exp(logprod)
+        } else {
+            produ <- prod(RNG(N))
+            if (produ > 0) logprod <- -log(produ)
+        }
+        meanprod <- meanprod + produ
+        meanlog <- meanlog + logprod
+        meangeom <- meangeom + produ^(1 / N)
     }
     meanprod <- meanprod / samplesize
     meanlog <- meanlog / samplesize
@@ -53,23 +74,24 @@ prod.mean <- function(samplesize = 1e+6, N = 100) {
     w <- writeLines
     s <- sprintf
     w(s("sample size       %1.0e", samplesize))
-    w(s("mean              %1.1e", meanprod))
+    w(s("2^-N              %1.0e", 2^-N))
+    w(s("mean              %1.0e", meanprod))
+    w(s("e^-N              %1.0e", exp(-N)))
     w(s("log(mean)         %1.1f", log(meanprod)))
     w(s("mean(log(prod))   %1.1f", meanlog))
     w(s("mean geom         %1.5f", meangeom))
     w(s("(1 + 1/N)^-N      %1.5f", (1 + 1 / N)^-N))
     w(s("1/e               %1.5f", 1 / exp(1)))
-    w(s("2^-N              %1.0e", 2^-N))
     w(s("2^-N/mean         %1.0e", 2^-N / meanprod))
     w(s("e^-N/mean         %1.0e", exp(-N) / meanprod))
-    w(s("mean              %1.16e", meanprod))
+    w(s("mean              %1.15e", meanprod))
 }
 
 # prod.longprod(N) multiplies N U(0, 1) random variables and
 # compares the log(result) to log(e^-N) = N.
 #
-# prod.longprod(100000)
-prod.longprod <- function(N = 1000000) {
+# prod.long(N=100000)
+prod.long <- function(N = 1e7) {
     prod <- 1
     k <- 0
     pow2 <- 0
@@ -77,9 +99,9 @@ prod.longprod <- function(N = 1000000) {
     while (k <= N - 100) {
         k <- k + 100
         prod <- prod * prod(RNG(100))
-        if (prod < 0x1p-800) {
-            prod <- prod * 0x1p+600
-            pow2 <- pow2 + 600
+        if (prod < 2^-800) {
+            prod <- prod * 2^800
+            pow2 <- pow2 + 800
         }
     }
     lprod <- log(prod) - pow2 * log(2)
@@ -141,7 +163,7 @@ rpoissonKnuth <- function(lambda) {
 # prod.plotPDF runs prodcnt product to lim and plot the sample
 #  distrubition with Poisson(-log(limit)) distribution.
 #
-# prod.plotPDF(lim=-745, prodcnt = 1e+5, log =T)
+# prod.plotPDF(lim=-745, samplesize = 1e+5, log =T)
 prod.plotPDF <- function(lim, samplesize = 1e+4, log = T) {
     if (!log && lim <= 2.5e-308) {
         stop("prod.plotPDF: limit must be > 2.5e-308")
@@ -191,6 +213,9 @@ prod.plotPDF <- function(lim, samplesize = 1e+4, log = T) {
 prod.chisqTest <- function(lim, samplesize = 1e+5, log = F) {
     if (!log && lim <= 2.5e-308) {
         stop("prod.chisqTest: lim must be > 2.5e-308")
+    }
+    if (log && lim < -745) {
+        stop("prod.plotPDF: log(limit) must be >= -745")
     }
     nmax <- 1000
     lambda <- -lim
