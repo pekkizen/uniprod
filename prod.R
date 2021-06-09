@@ -10,14 +10,15 @@ sourceCpp(file = "uniprod.cpp")
 # SETSEED <- dqset.seed
 # dqset.seed(1)
 
-# Standard R function. rgamma uses this always
+# Standard R random setup. rgamma uses this always
 # RNG <- runif
 # SETSEED <- set.seed
 # set.seed(1)
 
 # This needs C++ functions.
-RNG <- prod.runif
-SETSEED <- prod.set.seed
+# Necessary for comparing means from functions.
+RNG <- prodrunif
+SETSEED <- setseed
 # prod.set.seed(1)
 # --------------------------------------------
 
@@ -31,43 +32,51 @@ prod.zero <- function() {
     }
     n
 }
+# Seeding for C++ RNG
+prod.set.seed <- function(seed) {
+    invisible(setseed(seed))
+}
 
-# prod.mean80(samplesize=1e6, N = 100, gamma = F, seed = 0)
+# prod.mean80(samplesize=1e6, N = 200, gamma = F, seed = 0)
 prod.mean80 <- function(samplesize = 1e6, N = 200, gamma = F, seed = 0) {
-    if (gamma && seed > 0) set.seed(seed)
+    if (gamma && seed > 0) set.seed(seed) # for rgamma in C++ funcs.
     invisible(prodmean80(samplesize, N, gamma, seed))
 }
 
-# prod.mean64(samplesize=1e6, N = 100, gamma = F, seed = 0)
+# prod.mean64(samplesize=1e6, N = 200, gamma = F, seed = 0)
 prod.mean64 <- function(samplesize = 1e6, N = 200, gamma = F, seed = 0) {
     if (gamma && seed > 0) set.seed(seed)
     invisible(prodmean64(samplesize, N, gamma, seed))
 }
 
 # prod.mean samples samplesize U(0, 1) products of length N and
-# calculates a summary.
+# calculates a summary. The mean of the products is computed by
+# R mean function, which does some floating point error control.
+# stackoverflow.com/questions/17866149/what-algorithm-is-r-using-to-calculate-mean
 #
 # prod.mean(samplesize=1e6, N=200, gamma=F, seed=0)
 prod.mean <- function(samplesize = 1e6, N = 200, gamma = F, seed = 0) {
     meanprod <- 0
     meanlog <- 0
     meangeom <- 0
+    logp <- 0
     if (gamma && seed > 0) set.seed(seed) # rgamma
     if (!gamma && seed > 0) SETSEED(seed)
 
+    products <- numeric(samplesize)
     for (i in 1:samplesize) {
         if (gamma) {
-            logprod <- -rgamma(1, N)
-            produ <- exp(logprod)
+            logp <- -rgamma(1, N)
+            p <- exp(logp)
         } else {
-            produ <- prod(RNG(N))
-            if (produ > 0) logprod <- -log(produ)
+            p <- prod(RNG(N))
+            if (p > 0) logp <- log(p)
         }
-        meanprod <- meanprod + produ
-        meanlog <- meanlog + logprod
-        meangeom <- meangeom + produ^(1 / N)
+        products[i] <- p
+        meanlog <- meanlog + logp
+        meangeom <- meangeom + p^(1 / N)
     }
-    meanprod <- meanprod / samplesize
+    meanprod <- mean(products)
     meanlog <- meanlog / samplesize
     meangeom <- meangeom / samplesize
 
@@ -90,26 +99,26 @@ prod.mean <- function(samplesize = 1e6, N = 200, gamma = F, seed = 0) {
 # prod.longprod(N) multiplies N U(0, 1) random variables and
 # compares the log(result) to log(e^-N) = N.
 #
-# prod.long(N=100000)
+# prod.long(N=1e7)
 prod.long <- function(N = 1e7) {
     prod <- 1
     k <- 0
-    pow2 <- 0
+    exp2 <- 0
     k <- 0
     while (k <= N - 100) {
         k <- k + 100
         prod <- prod * prod(RNG(100))
         if (prod < 2^-800) {
             prod <- prod * 2^800
-            pow2 <- pow2 + 800
+            exp2 <- exp2 + 800
         }
     }
-    lprod <- log(prod) - pow2 * log(2)
+    lprod <- log(prod) - exp2 * log(2)
     diff <- (k + lprod) / k
     w <- writeLines
     s <- sprintf
     w(s("N = %1.0f", k))
-    w(s("log(prod) = -log(%1.2e x 2^-%d) = %1.0f", prod, pow2, -lprod))
+    w(s("log(prod) = -log(%1.2e x 2^-%d) = %1.0f", prod, exp2, -lprod))
     w(s("Relative difference to N = -log(e^-N) = %1.5f", diff))
 }
 
@@ -160,8 +169,8 @@ rpoissonKnuth <- function(lambda) {
     }
 }
 
-# prod.plotPDF runs prodcnt product to lim and plot the sample
-#  distrubition with Poisson(-log(limit)) distribution.
+# prod.plotPDF runs samplesize products to lim and plot the sample
+#  distrubition with Poisson(-log(lim)) distribution.
 #
 # prod.plotPDF(lim=-745, samplesize = 1e+5, log =T)
 prod.plotPDF <- function(lim, samplesize = 1e+4, log = T) {
