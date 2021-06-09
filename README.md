@@ -12,7 +12,7 @@ The functions are some what commented in the program code.
 
 ## Examples
 
-If parameter gamma = TRUE, product of N U(0, 1) variables
+If parameter gamma = TRUE, the product of N U(0, 1) variables
 is simulated by a single gamma random variable:
 
 ```R
@@ -25,10 +25,11 @@ is simulated by a single gamma random variable:
 prod.tozero()
 
 # R function, which uses R mean(vector) for sample mean.
-# Probably gives the best estimate of product mean.
+# Probably gives the best accuracy for the product mean.
 prod.mean(samplesize = 1e6, N = 200, gamma = F, seed = 0)
 
 # C++ function with 80-bit extended precision computation
+# Can handle products up to 11000 variables.
 prod.mean80(samplesize = 1e7, N = 5000, gamma = T, seed = 0)
 
 # Faster C++ version of prod.mean. Uses own summing control
@@ -41,5 +42,5 @@ prod.long(N = 1e7)
 
 # Runs samplesize products to e^lim and plots sampled product
 # lenght distribution against Poisson(-lim) distribution.
-prod.plotPDF(lim = -745, samplesize = 1e+6, log = T)
+prod.plotPDF(lim = -500, samplesize = 1e+5, log = T)
 ```
