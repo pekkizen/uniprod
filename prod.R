@@ -4,13 +4,7 @@ library(Rcpp)
 sourceCpp(file = "uniprod.cpp")
 
 # setup rng --------------------------------
-# library(dqrng)
-# RNG <- dqrunif
-# dqRNGkind("Xoroshiro128+")
-# SETSEED <- dqset.seed
-# dqset.seed(1)
-
-# Standard R random setup. rgamma uses this always
+# Standard R random setup. rgamma uses this always.
 # RNG <- runif
 # SETSEED <- set.seed
 # set.seed(1)
@@ -19,10 +13,11 @@ sourceCpp(file = "uniprod.cpp")
 # Necessary for comparing means from functions.
 RNG <- prodrunif
 SETSEED <- setseed
-# prod.set.seed(1)
+# setseed(1)
 # --------------------------------------------
 
-prod.zero <- function() {
+# prod.tozero()
+prod.tozero <- function() {
     prod <- 1
     n <- 0
     while (T) {
@@ -37,6 +32,11 @@ prod.set.seed <- function(seed) {
     invisible(setseed(seed))
 }
 
+# prod.mean128(samplesize=1e6, N = 200, seed = 0)
+prod.mean128 <- function(samplesize = 1e6, N = 200, seed = 0) {
+    invisible(prodmean128(samplesize, N, seed))
+}
+
 # prod.mean80(samplesize=1e6, N = 200, gamma = F, seed = 0)
 prod.mean80 <- function(samplesize = 1e6, N = 200, gamma = F, seed = 0) {
     if (gamma && seed > 0) set.seed(seed) # for rgamma in C++ funcs.
@@ -49,12 +49,12 @@ prod.mean64 <- function(samplesize = 1e6, N = 200, gamma = F, seed = 0) {
     invisible(prodmean64(samplesize, N, gamma, seed))
 }
 
-# prod.mean samples samplesize U(0, 1) products of length N and
+# prod.mean generates samplesize U(0, 1) products of length N and
 # calculates a summary. The mean of the products is computed by
 # R mean function, which does some floating point error control.
 # stackoverflow.com/questions/17866149/what-algorithm-is-r-using-to-calculate-mean
 #
-# prod.mean(samplesize=1e6, N=200, gamma=F, seed=0)
+# prod.mean(samplesize=1e6, N=200, gamma=F, seed=1)
 prod.mean <- function(samplesize = 1e6, N = 200, gamma = F, seed = 0) {
     meanprod <- 0
     meanlog <- 0
@@ -84,19 +84,16 @@ prod.mean <- function(samplesize = 1e6, N = 200, gamma = F, seed = 0) {
     s <- sprintf
     w(s("sample size       %1.0e", samplesize))
     w(s("2^-N              %1.0e", 2^-N))
-    w(s("mean              %1.0e", meanprod))
+    w(s("mean              %1.0e  %1.15e", meanprod, meanprod))
     w(s("e^-N              %1.0e", exp(-N)))
     w(s("log(mean)         %1.1f", log(meanprod)))
     w(s("mean(log(prod))   %1.1f", meanlog))
     w(s("mean geom         %1.5f", meangeom))
     w(s("(1 + 1/N)^-N      %1.5f", (1 + 1 / N)^-N))
     w(s("1/e               %1.5f", 1 / exp(1)))
-    w(s("2^-N/mean         %1.0e", 2^-N / meanprod))
-    w(s("e^-N/mean         %1.0e", exp(-N) / meanprod))
-    w(s("mean              %1.15e", meanprod))
 }
 
-# prod.longprod(N) multiplies N U(0, 1) random variables and
+# prod.long(N) multiplies N U(0, 1) random variables and
 # compares the log(result) to log(e^-N) = N.
 #
 # prod.long(N=1e7)

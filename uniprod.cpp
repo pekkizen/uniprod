@@ -1,10 +1,9 @@
 
-#include <cmath>
-#include <cstdio>
-#include <stdint.h>
-
 #include <Rcpp.h>
 using namespace Rcpp;
+
+#include <quadmath.h>
+// #include <boost/multiprecision/float128.hpp>
 
 static inline uint64_t rotl(const uint64_t x, int k) {
     return (x << k) | (x >> (64 - k));
@@ -63,7 +62,8 @@ static inline int exponent(double x) {
 int prodmean80(long double samplesize = 1e+6, long double N = 100,
                bool gamma = false, uint64_t seed = 0) {
     long double meanprod = 0, meanlog = 0, meangeom = 0,
-                logp = 0, prev = 0, missed = 0, p;
+                logp = 0, next = 0, sum = 0,
+                missed = 0, p;
     if (!gamma && seed > 0) setseed(seed);
 
     for (long i = 0; i < samplesize; i++) {
@@ -74,38 +74,39 @@ int prodmean80(long double samplesize = 1e+6, long double N = 100,
             p = 1;
             for (int k = 0; k < N; k++)
                 p *= myrunif();
-            if (p > 0) logp = log(p);
+            if (p > 0) logp = logl(p);
         }
-        meanprod += p;
-        if (meanprod == prev) missed += p;
-        prev = meanprod;
+        // Neumaier summation
+        next = sum + p;
+        if (sum >= p)
+            missed += (sum - next) + p;
+        else
+            missed += (p - next) + sum;
+        sum = next;
         meanlog += logp;
         meangeom += expl(logl(p) / N);
     }
-    meanprod += missed; // doesn't help much
-    meanprod /= samplesize;
+    sum += missed; // doesn't make much difference
+    meanprod = sum / samplesize;
     meanlog /= samplesize;
     meangeom /= samplesize;
 
     printf("sample size       %1.0Le\n", samplesize);
     printf("2^-N              %1.0Le\n", powl(2, -N));
-    printf("mean(prod)        %1.0Le\n", meanprod);
+    printf("mean(prod)        %1.0Le  %1.18Le\n", meanprod, meanprod);
     printf("e^-N              %1.0Le\n", expl(-N));
     printf("log(mean)         %1.0Lf\n", logl(meanprod));
     printf("mean(log(prod))   %1.0Lf\n", meanlog);
     printf("mean geom         %1.5Lf\n", meangeom);
     printf("(1 + 1/N)^-N      %1.5Lf\n", powl(1 + 1 / N, -N));
     printf("1/e               %1.5f\n", 1 / exp(1));
-    printf("2^-N/mean         %1.0Le\n", powl(2, -N) / meanprod);
-    printf("e^-N/mean         %1.0Le\n", expl(-N) / meanprod);
-    printf("mean              %1.18Le\n", meanprod);
     printf("mean missed sum   %1.0Le\n", missed / samplesize);
     return 0;
 }
 
-// prodmean64 uses array mexp[1023] to add products of same magnitude
+// prodmean64 uses array mexp[1023] to sum products of same magnitude
 // to a same array slot. mexp[1023] has a slot for every exponent
-// value for 64-bit floats < 1. Number prod is added to slot[k], where
+// values for 64-bit floats < 1. Number prod is added to slot[k], where
 // k = exponent of prod: mexp[exponent(prod)] += prod;
 //
 // [[Rcpp::export]]
@@ -126,11 +127,11 @@ int prodmean64(double samplesize = 1e+6, double N = 100,
             if (p > 0) logp = log(p);
         }
         mexp[exponent(p)] += p;
-
         meanlog += logp;
         meangeom += exp(log(p) / N);
     }
     for (int i = 0; i < 1023; i++) {
+        // printf("exp|meanprod|mexp[i] %d|%1.0e|%1.0e\n", i - 1023, meanprod, mexp[i]);
         meanprod += mexp[i]; // from small to big
     }
     meanprod /= samplesize;
@@ -139,16 +140,36 @@ int prodmean64(double samplesize = 1e+6, double N = 100,
 
     printf("sample size       %1.0e\n", samplesize);
     printf("2^-N              %1.0e\n", pow(2, -N));
-    printf("mean(prod)        %1.0e\n", meanprod);
+    printf("mean(prod)        %1.0e  %1.15e\n", meanprod, meanprod);
     printf("e^-N              %1.0e\n", exp(-N));
     printf("log(mean)         %1.0f\n", log(meanprod));
     printf("mean(log(prod))   %1.0f\n", meanlog);
     printf("mean geom         %1.5f\n", meangeom);
     printf("(1 + 1/N)^-N      %1.5f\n", pow(1 + 1 / N, -N));
     printf("1/e               %1.5f\n", 1 / exp(1));
+    return 0;
+}
 
-    printf("2^-N/mean         %1.0e\n", pow(2, -N) / meanprod);
-    printf("e^-N/mean         %1.0e\n", exp(-N) / meanprod);
-    printf("mean              %1.15e\n", meanprod);
+// prodmean128 uses 128-bit arithmetic for mean(product).
+// [[Rcpp::export]]
+int prodmean128(long double samplesize = 1e+6, long double N = 100, uint64_t seed = 0) {
+    long double meanprod, meanlog = 0, meangeom = 0;
+    __float128 sum = 0.0, p;
+    if (seed > 0) setseed(seed);
+
+    for (long i = 0; i < samplesize; i++) {
+        p = 1.0;
+        for (int k = 0; k < N; k++)
+            p *= myrunif();
+        sum += p;
+    }
+    meanprod = (long double)(sum / samplesize);
+    meanlog /= samplesize;
+    meangeom /= samplesize;
+
+    printf("sample size       %1.0Le\n", samplesize);
+    printf("2^-N              %1.0Le\n", powl(2, -N));
+    printf("mean(prod)        %1.0Le  %1.18Le\n", meanprod, meanprod);
+    printf("e^-N              %1.0Le\n", expl(-N));
     return 0;
 }
