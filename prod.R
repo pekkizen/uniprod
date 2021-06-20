@@ -3,17 +3,18 @@
 library(Rcpp)
 sourceCpp(file = "uniprod.cpp")
 
+# https://math.stackexchange.com/questions/3134927/
+# central-limit-theorem-with-extremely-skewed-population
+
 # setup rng --------------------------------
 # Standard R random setup. rgamma uses this always.
 # RNG <- runif
 # SETSEED <- set.seed
-# set.seed(1)
 
 # This needs C++ functions.
 # Necessary for comparing means from functions.
 RNG <- prodrunif
 SETSEED <- setseed
-# setseed(1)
 # --------------------------------------------
 
 # prod.tozero()
@@ -32,7 +33,7 @@ prod.set.seed <- function(seed) {
     invisible(setseed(seed))
 }
 
-# prod.mean128(samplesize=1e6, N = 200, seed = 0)
+# prod.mean128(samplesize=1e5, N = 200, seed = 0)
 prod.mean128 <- function(samplesize = 1e6, N = 200, seed = 0) {
     invisible(prodmean128(samplesize, N, seed))
 }
@@ -83,11 +84,22 @@ prod.mean <- function(samplesize = 1e6, N = 200, gamma = F, seed = 0) {
     w <- writeLines
     s <- sprintf
     w(s("sample size       %1.0e", samplesize))
-    w(s("2^-N              %1.0e", 2^-N))
-    w(s("mean              %1.0e  %1.15e", meanprod, meanprod))
+    w(s("N                 %d", N))
+    w(s("2^-N              %1.0e  (mean distribution)", 2^-N))
+    w(s("mean sample       %1.0e  %1.15e", meanprod, meanprod))
     w(s("e^-N              %1.0e", exp(-N)))
-    w(s("log(mean)         %1.1f", log(meanprod)))
-    w(s("mean(log(prod))   %1.1f", meanlog))
+    w(s("median sample     %1.0e", median(products)))
+    w(s(
+        "SE mean sample    %1.0e  (sample mean & var)",
+        sd(products) / sqrt(N)
+    ))
+    w(s(
+        "SE mean sample    %1.0e  (distribution mean & var)",
+        sqrt((1 / 12 + 0.25)^N - 0.25^N) / sqrt(N)
+    ))
+    w(s("log mean          %1.1f", log(meanprod)))
+    w(s("mean log(prod)    %1.1f", meanlog))
+    w(s("median log(prod)  %1.1f", median(log(products))))
     w(s("mean geom         %1.5f", meangeom))
     w(s("(1 + 1/N)^-N      %1.5f", (1 + 1 / N)^-N))
     w(s("1/e               %1.5f", 1 / exp(1)))
@@ -115,8 +127,8 @@ prod.long <- function(N = 1e7) {
     w <- writeLines
     s <- sprintf
     w(s("N = %1.0f", k))
-    w(s("log(prod) = -log(%1.2e x 2^-%d) = %1.0f", prod, exp2, -lprod))
-    w(s("Relative difference to N = -log(e^-N) = %1.5f", diff))
+    w(s("log(prod) = -log(%1.2e x 2^-%d) = %1.1f", prod, exp2, -lprod))
+    w(s("Relative difference to N = -log(e^-N) = %1.5f", -diff))
 }
 
 prod.mulToLim <- function(lim, nmax = 1000, log = F) {
