@@ -1,16 +1,23 @@
-uniprod
+# uniprod
+
 These functions are for computing and comparing sample mean values of products of Uniform(0, 1) random numbers.
 
 Loading prod.R in workspace calls Rcpp/C++ compiler for C++ functions in uniprod.cpp file. Copy both files to a same directory.
 
 R functions implement most of the functionality and C++ functions are not entirely necessary.
 
-Examples
-If parameter gamma = TRUE, the product of N U(0, 1) variables is simulated by a single Gamma random variable:
+## Examples
 
+If parameter gamma = TRUE, the product of N U(0, 1) variables
+is simulated by a single Gamma random variable:
+
+```R
     prod(runif(N)) is simulated by exp(-rgamma(1,N))
+```
+
 If parameter seed > 0, random number generator is seeded by the seed.
 
+```R
 # Multiplies U(0, 1) variables until product is zero.
 # Returns number of variables.
 prod.tozero()
@@ -38,3 +45,4 @@ prod.long(N = 1e7)
 # Runs samplesize products to e^lim and plots sampled product
 # lenght distribution against Poisson(-lim) distribution.
 prod.plotPDF(lim = -500, samplesize = 1e+5, log = T)
+```
