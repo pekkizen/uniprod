@@ -3,16 +3,13 @@
 library(Rcpp)
 sourceCpp(file = "uniprod.cpp")
 
-# https://math.stackexchange.com/questions/3134927/
-# central-limit-theorem-with-extremely-skewed-population
-
 # setup rng --------------------------------
 # Standard R random setup. rgamma uses this always.
 # RNG <- runif
 # SETSEED <- set.seed
 
-# This needs C++ functions.
-# Necessary for comparing means from functions.
+# This needs C++ functions/compiler.
+# Faster random number generator.
 RNG <- prodrunif
 SETSEED <- setseed
 # --------------------------------------------
@@ -33,11 +30,13 @@ prod.set.seed <- function(seed) {
     invisible(setseed(seed))
 }
 
+# 128-bit arithmetic
 # prod.mean128(samplesize=1e5, N = 200, seed = 0)
 prod.mean128 <- function(samplesize = 1e6, N = 200, seed = 0) {
     invisible(prodmean128(samplesize, N, seed))
 }
 
+# 80-bit extended arithmetic
 # prod.mean80(samplesize=1e6, N = 200, gamma = F, seed = 0)
 prod.mean80 <- function(samplesize = 1e6, N = 200, gamma = F, seed = 0) {
     if (gamma && seed > 0) set.seed(seed) # for rgamma in C++ funcs.
@@ -51,58 +50,90 @@ prod.mean64 <- function(samplesize = 1e6, N = 200, gamma = F, seed = 0) {
 }
 
 # prod.mean generates samplesize U(0, 1) products of length N and
-# calculates a summary. The mean of the products is computed by
-# R mean function, which does some floating point error control.
-# stackoverflow.com/questions/17866149/what-algorithm-is-r-using-to-calculate-mean
-#
+# calculates a summary.
 # prod.mean(samplesize=1e6, N=200, gamma=F, seed=1)
 prod.mean <- function(samplesize = 1e6, N = 200, gamma = F, seed = 0) {
     meanprod <- 0
-    meanlog <- 0
-    meangeom <- 0
-    logp <- 0
     if (gamma && seed > 0) set.seed(seed) # rgamma
     if (!gamma && seed > 0) SETSEED(seed)
 
     products <- numeric(samplesize)
     for (i in 1:samplesize) {
         if (gamma) {
-            logp <- -rgamma(1, N)
-            p <- exp(logp)
+            p <- exp(-rgamma(1, N))
         } else {
             p <- prod(RNG(N))
-            if (p > 0) logp <- log(p)
         }
+        # if (N == 1) p <- p * p * p * p * p
         products[i] <- p
-        meanlog <- meanlog + logp
-        meangeom <- meangeom + p^(1 / N)
     }
     meanprod <- mean(products)
-    meanlog <- meanlog / samplesize
-    meangeom <- meangeom / samplesize
 
     w <- writeLines
     s <- sprintf
-    w(s("sample size       %1.0e", samplesize))
-    w(s("N                 %d", N))
-    w(s("2^-N              %1.0e  (mean distribution)", 2^-N))
-    w(s("mean sample       %1.0e  %1.15e", meanprod, meanprod))
-    w(s("e^-N              %1.0e", exp(-N)))
-    w(s("median sample     %1.0e", median(products)))
+    w(s("sample size         %1.0e", samplesize))
+    w(s("N                   %d", N))
+
+    w(s("mean sample         %1.1e  %1.15e", meanprod, meanprod))
+    w(s("mean distribution   %1.1e  2^-N", 2^-N))
+    w(s("e^-N                %1.1e", exp(-N)))
+    w(s("median sample       %1.3e", median(products)))
+    w(s("median distribution %1.3e", exp(-qgamma(0.5, N))))
     w(s(
-        "SE mean sample    %1.0e  (sample mean & var)",
-        sd(products) / sqrt(N)
+        "SE mean sample      %1.1e  by sample mean & var)",
+        sd(products) / sqrt(samplesize)
     ))
     w(s(
-        "SE mean sample    %1.0e  (distribution mean & var)",
-        sqrt((1 / 12 + 0.25)^N - 0.25^N) / sqrt(N)
+        "SE mean sample      %1.1e  by distribution mean & var",
+        sqrt((1 / 12 + 0.25)^N - 0.25^N) / sqrt(samplesize)
     ))
-    w(s("log mean          %1.1f", log(meanprod)))
-    w(s("mean log(prod)    %1.1f", meanlog))
-    w(s("median log(prod)  %1.1f", median(log(products))))
-    w(s("mean geom         %1.5f", meangeom))
-    w(s("(1 + 1/N)^-N      %1.5f", (1 + 1 / N)^-N))
-    w(s("1/e               %1.5f", 1 / exp(1)))
+    w(s("log mean            %1.1f", log(meanprod)))
+    w(s("mean log(prod)      %1.1f", mean(log(products))))
+    w(s("median log(prod)    %1.1f", median(log(products))))
+    w(s("mean geom sample    %1.5f", mean(products^(1 / N))))
+    w(s(
+        "(1 + 1/N)^-N        %1.5f  mean geom distribution",
+        (1 + 1 / N)^-N
+    ))
+    w(s("1/e                 %1.5f", 1 / exp(1)))
+}
+
+# https://en.wikipedia.org/wiki/Poisson_distribution#Confidence_interval
+prod.clim <- function(samplesize = 1e6, N = 200, gamma = F, seed = 0) {
+    within <- 0
+    lowlim <- exp(-qgamma(1 - 0.05 / 2, N))
+    uplim <- exp(-qgamma(0.05 / 2, N))
+    center <- exp(-qgamma(0.5, N))
+
+    # me <- N #- 1 / 3 + (8 / 405) / N #+ 184 / (25515 * N * N)
+    # lowlim <- exp(-me - 2 * sqrt(N))
+    # uplim <- exp(-me + 2 * sqrt(N))
+    # center <- exp(-me)
+
+    if (gamma && seed > 0) set.seed(seed) # rgamma
+    if (!gamma && seed > 0) SETSEED(seed)
+
+    for (i in 1:samplesize) {
+        if (gamma) {
+            p <- exp(-rgamma(1, N))
+        } else {
+            p <- prod(RNG(N))
+        }
+        if (p >= lowlim && p <= uplim) within <- within + 1
+    }
+    me <- N - 1 / 3 + (8 / 405) / N #+ 184 / (25515 * N * N)
+
+    w <- writeLines
+    s <- sprintf
+    w(s("sample size      %1.0e", samplesize))
+    w(s("N                %d", N))
+    w(s("e^-N             %1.1e", exp(-N)))
+    w(s("CL low           %1.1e", lowlim))
+    w(s("median           %1.4e", center))
+    w(s("median est.      %1.4e", exp(-me)))
+    w(s("CL high          %1.1e", uplim))
+    w(s("2^-N             %1.1e", 2^-N))
+    w(s("within CI        %1.4f", within / samplesize))
 }
 
 # prod.long(N) multiplies N U(0, 1) random variables and

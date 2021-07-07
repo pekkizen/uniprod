@@ -1,6 +1,6 @@
 # uniprod
 
-These functions are for computing and comparing sample mean values of products of Uniform(0, 1) random numbers.
+Functions for computing statistics of products of Uniform(0, 1) random numbers.
 
 Loading prod.R in workspace calls Rcpp/C++ compiler for C++ functions in uniprod.cpp file. Copy both files to a same directory.
 
@@ -22,21 +22,16 @@ If parameter seed > 0, random number generator is seeded by the seed.
 # Returns number of variables.
 prod.tozero()
 
-# R function, which uses R mean(vector) for sample mean.
-# R mean does some floating point error control.
+# prod.mean calculates sample mean and median and statistics.
 prod.mean(samplesize = 1e6, N = 200, gamma = F, seed = 0)
 
+# Function for calculating sample mean
 # C++ function with 80-bit extended precision computation
 # Can handle products up to 11000 variables.
-# Adjusts summing error by Kahan/Neumaier summing.
 prod.mean80(samplesize = 1e7, N = 5000, gamma = T, seed = 0)
 
-# Faster C++ version of prod.mean. Uses own summing 
-# control for the mean computation. 
-prod.mean64(samplesize = 1e7, N = 200, gamma = F, seed = 0)
-
-# Slow C++ 128-bit version for "accurate" meanreference.
-prod.mean128(samplesize = 1e5, N = 200, seed = 1)
+# prod.clim calculates and tests confidence intervals.
+prod.clim(samplesize = 1e6, N = 200, gamma = F, seed = 0)
 
 # prod.long(N) multiplies N U(0, 1) random variables and
 # compares the log(result) to log(e^-N) = N.

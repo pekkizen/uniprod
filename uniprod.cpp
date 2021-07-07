@@ -49,7 +49,6 @@ static inline int exponent(double x) {
     } z = {.d = x};
     return (int)(z.u >> 52) & 0x7ff;
 }
-
 // prodmean64 uses array mexp[1023] to sum products of same magnitude
 // to a same array slot.
 // [[Rcpp::export]]
@@ -82,13 +81,11 @@ int prodmean64(double samplesize = 1e+6, double N = 100,
     meanlog /= samplesize;
 
     printf("sample size       %1.0e\n", samplesize);
-
     printf("N                 %1.0f\n", N);
-
     printf("2^-N              %1.0e  (mean distribution)\n", pow(2, -N));
-    printf("max sample        %1.0e\n", pmax);
     printf("mean sample       %1.0e  %1.15e\n", meanprod, meanprod);
     printf("e^-N              %1.0e\n", exp(-N));
+    printf("max sample        %1.0e\n", pmax);
     printf("log mean          %1.0f\n", log(meanprod));
     printf("mean log(prod)    %1.0f\n", meanlog);
     return 0;
@@ -114,6 +111,7 @@ int prodmean80(long double samplesize = 1e+6, long double N = 100,
                 p *= myrunif();
             if (p > 0) logp = log(p);
         }
+        meanlog += logp;
         // Kahan/Neumaier summation
         nextsum = sum + p;
         if (sum >= p)
@@ -121,7 +119,6 @@ int prodmean80(long double samplesize = 1e+6, long double N = 100,
         else
             missed += (p - nextsum) + sum;
         sum = nextsum;
-        meanlog += logp;
     }
     sum += missed;
     meanprod = sum / samplesize;
@@ -138,6 +135,7 @@ int prodmean80(long double samplesize = 1e+6, long double N = 100,
 }
 
 #include <quadmath.h>
+
 // prodmean128 uses 128-bit quadruple-precision arithmetic for mean.
 // Quadruple-precision gives 34 decimal digits accuracy.
 // [[Rcpp::export]]
